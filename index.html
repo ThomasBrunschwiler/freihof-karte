@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Freihof Brauerei – Vertriebskarte CRM</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f0f0}
+#map{width:100%;height:100vh}
+.header-bar{position:fixed;top:0;left:0;right:0;z-index:1000;background:linear-gradient(135deg,#1B4332,#2D6A4F);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+.header-bar h1{color:#fff;font-size:18px;font-weight:700;letter-spacing:.5px}
+.header-bar span{color:#95D5B2;font-size:13px}
+.legend{position:fixed;bottom:20px;left:20px;z-index:1000;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border:1px solid #2D6A4F;border-radius:10px;padding:14px 18px;color:#333;font-size:12px;max-width:260px;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+.legend h3{color:#95D5B2;font-size:13px;margin-bottom:8px;font-weight:600}
+.legend-item{display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer;padding:2px 4px;border-radius:4px;transition:background .2s}
+.legend-item:hover{background:rgba(45,106,79,.3)}
+.legend-item .dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:2px solid rgba(0,0,0,.2)}
+.legend-item.dimmed{opacity:.3}
+.filter-bar{position:fixed;top:50px;left:20px;z-index:1000;display:flex;gap:6px;flex-wrap:wrap;max-width:400px}
+.filter-btn{background:rgba(255,255,255,.9);backdrop-filter:blur(6px);border:1px solid #2D6A4F;color:#1B4332;padding:5px 10px;border-radius:16px;font-size:11px;cursor:pointer;transition:all .2s}
+.filter-btn:hover,.filter-btn.active{background:#2D6A4F;color:#fff}
+.stats-box{position:fixed;top:50px;right:20px;z-index:1000;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border:1px solid #2D6A4F;border-radius:10px;padding:12px 16px;color:#333;font-size:12px}
+.stats-box .num{font-size:22px;font-weight:700;color:#40C057}
+.leaflet-popup-content-wrapper{background:rgba(255,255,255,.97)!important;border:1px solid #2D6A4F!important;border-radius:10px!important;color:#333!important;backdrop-filter:blur(8px);box-shadow:0 3px 14px rgba(0,0,0,.18)!important}
+.leaflet-popup-tip{background:rgba(255,255,255,.97)!important;border:1px solid #2D6A4F!important}
+.leaflet-popup-content{margin:12px 16px!important;font-size:13px;line-height:1.5}
+.popup-name{font-size:15px;font-weight:700;color:#95D5B2;margin-bottom:4px}
+.popup-cat{font-size:11px;color:#2D6A4F;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.popup-row{display:flex;gap:6px;margin:3px 0}
+.popup-label{color:#1B4332;font-weight:600;min-width:65px}
+.popup-link{color:#2D6A4F;text-decoration:none}
+.popup-link:hover{text-decoration:underline}
+.popup-status{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
+.status-offen{background:rgba(64,192,87,.15);color:#40C057;border:1px solid #40C057}
+.status-verhandlung{background:rgba(255,193,7,.15);color:#FFC107;border:1px solid #FFC107}
+.status-bestandskunde{background:rgba(33,150,243,.15);color:#42A5F5;border:1px solid #42A5F5}
+.status-gelistet{background:rgba(171,71,188,.15);color:#CE93D8;border:1px solid #CE93D8}
+.freihof-marker{background:linear-gradient(135deg,#d4a017,#f5c518);width:20px;height:20px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 12px rgba(245,197,24,.6)}
+</style>
+</head>
+<body>
+<div class="header-bar">
+  <h1>🍺 Freihof Brauerei – Vertriebskarte</h1>
+  <span id="count-display">Lade...</span>
+</div>
+<div id="map"></div>
+<div class="legend" id="legend"></div>
+<script>
+const FREIHOF = [47.412667, 9.240337];
+
+const categories = {
+  "Craft Beer Bar": {color:"#E63946",icon:"🍺"},
+  "Brauerei-Bar": {color:"#E63946",icon:"🍺"},
+  "Restaurant": {color:"#F4A261",icon:"🍽️"},
+  "Restaurantkette": {color:"#F4A261",icon:"🍽️"},
+  "Pop-up / Event": {color:"#E9C46A",icon:"🎪"},
+  "Eventlocation": {color:"#E9C46A",icon:"🎪"},
+  "Eventveranstalter": {color:"#E9C46A",icon:"🎪"},
+  "Hotel": {color:"#9B59B6",icon:"🏨"},
+  "Getränkehandel": {color:"#2196F3",icon:"📦"},
+  "Detailhandel": {color:"#00BCD4",icon:"🏪"},
+  "Brauerei": {color:"#FF5722",icon:"🏭"},
+  "Online / Plattform": {color:"#78909C",icon:"💻"},
+  "Sonstiges": {color:"#78909C",icon:"📌"},
+  "Freihof": {color:"#F5C518",icon:"⭐"}
+};
+
+function classifyCat(cat, name) {
+  if (name.includes("Freihof") && !cat.includes("Getränk")) return "Freihof";
+  const c = cat.toLowerCase();
+  if (c.includes("craft beer bar") || c.includes("bierspezialität")) return "Craft Beer Bar";
+  if (c.includes("brauerei-bar") || c.includes("brauerei-restaurant") || c.includes("brewpub")) return "Brauerei-Bar";
+  if (c.includes("pop-up") || c.includes("popup") || c.includes("catering")) return "Pop-up / Event";
+  if (c.includes("eventlocation") || c.includes("eventveranstalter") || c.includes("messe")) return "Eventlocation";
+  if (c.includes("hotel")) return "Hotel";
+  if (c.includes("restaurant") || c.includes("restaurantkette")) return "Restaurant";
+  if (c.includes("getränk") || c.includes("craft beer handel") || c.includes("craft beer grosshandel")) return "Getränkehandel";
+  if (c.includes("detailhandel") || c.includes("cash & carry")) return "Detailhandel";
+  if (c.includes("brauerei") || c.includes("grossbrauerei") || c.includes("mikrobrauerei") || c.includes("traditionsbrauerei") || c.includes("craft-grossbrauerei") || c.includes("craft-brauerei") || c.includes("mittelgrosse")) return "Brauerei";
+  if (c.includes("online") || c.includes("plattform")) return "Online / Plattform";
+  return "Sonstiges";
+}
+
+const pois = [
+  // FREIHOF HOME
+  {n:"Freihof Brauerei AG",cat:"Freihof",ort:"Gossau SG",lat:47.412667,lng:9.240337,web:"https://www.freihof.swiss",kontakt:"Thomas Brunschwiler / David Santiago",tel:"+41 71 385 34 34",email:"",status:"Hauptsitz",prio:"",km:0,notizen:"Brauerei & Hofstube – Kapazität 3'000 hl/Jahr"},
+  // ABSATZKANÄLE
+  {n:"Biergarage",cat:"Craft Beer Bar",ort:"St. Gallen",lat:47.4350866,lng:9.3934784,web:"https://biergarage.ch",kontakt:"Adrian Schmid",tel:"+41 79 278 54 40",email:"",status:"Offen",prio:"Hoch",km:12,notizen:"Braumanufaktur, führt regionale Craft-Biere"},
+  {n:"HermannBier",cat:"Brauerei-Bar",ort:"St. Gallen",lat:47.4246032,lng:9.3810244,web:"https://hermannbier.ch",kontakt:"Marco Hermann / Gianluca Bernet",tel:"+41 71 556 59 95",email:"",status:"Offen",prio:"Mittel",km:12,notizen:"12 Zapfhähne, bezieht teils Gastbiere"},
+  {n:"Al Capone Craft Beer Bar",cat:"Craft Beer Bar",ort:"St. Gallen",lat:47.4265884,lng:9.3766597,web:"https://www.steakhouse-alcapone.ch",kontakt:"",tel:"+41 71 223 45 03",email:"",status:"Offen",prio:"Hoch",km:14,notizen:"Craft-Beer-Bar & Steakhouse"},
+  {n:"Brauhaus Sternen",cat:"Brauerei-Bar",ort:"Frauenfeld",lat:47.5583941,lng:8.900832,web:"https://www.brauhaus-sternen.ch",kontakt:"",tel:"+41 52 728 99 09",email:"",status:"Offen",prio:"Mittel",km:40,notizen:"Seit 30+ Jahren, Spezialitätenbiere"},
+  {n:"Kornhausbräu",cat:"Brauerei-Bar",ort:"Rorschach",lat:47.4764671,lng:9.484683,web:"https://kornhausbraeu.ch",kontakt:"",tel:"+41 71 841 45 10",email:"",status:"Offen",prio:"Mittel",km:18,notizen:"Eigene Brauerei, verkauft im Detailhandel"},
+  {n:"Restaurant Brauwerk",cat:"Brauerei-Bar",ort:"St. Gallen",lat:47.424724,lng:9.371684,web:"https://www.restaurantbrauwerk.ch",kontakt:"",tel:"+41 71 222 85 90",email:"",status:"Offen",prio:"Niedrig",km:12,notizen:"Schützengarten-Betrieb"},
+  {n:"Gala Getränkehandel",cat:"Getränkehandel",ort:"Goldach",lat:47.472,lng:9.468,web:"https://www.gala-getraenkehandel.ch",kontakt:"",tel:"071 845 55 55",email:"",status:"Offen",prio:"Hoch",km:20,notizen:"Fokus Gastronomie, Grossraum SG"},
+  {n:"NIBA Getränke AG",cat:"Getränkehandel",ort:"Flawil",lat:47.4123146,lng:9.190749,web:"https://www.niba.ch",kontakt:"",tel:"+41 71 393 54 53",email:"info@niba.ch",status:"Offen",prio:"Hoch",km:15,notizen:"Seit 80J, ganze Ostschweiz"},
+  {n:"Getränke Wiederkehr AG",cat:"Getränkehandel",ort:"St. Gallen",lat:47.4114873,lng:9.3414998,web:"https://www.wiederkehr-getraenke.ch",kontakt:"",tel:"+41 71 277 32 44",email:"",status:"Offen",prio:"Hoch",km:12,notizen:"Gastro + Privat + Events"},
+  {n:"Getränke Koller AG",cat:"Getränkehandel",ort:"Abtwil",lat:47.422886,lng:9.326676,web:"https://www.koller-getraenke.ch",kontakt:"",tel:"+41 71 311 13 18",email:"",status:"Offen",prio:"Mittel",km:8,notizen:"Events, Partys, Anlässe"},
+  {n:"Durstfrei",cat:"Getränkehandel",ort:"Gossau SG",lat:47.414,lng:9.245,web:"https://durstfrei.ch",kontakt:"",tel:"",email:"",status:"Bestandskunde",prio:"Hoch",km:1,notizen:"Führt bereits Freihof Bier!"},
+  {n:"Jenny's Getränke-Shop",cat:"Getränkehandel",ort:"Arnegg",lat:47.443353,lng:9.255406,web:"https://www.jennys-getraenke-shop.ch",kontakt:"",tel:"+41 71 430 05 63",email:"",status:"Offen",prio:"Mittel",km:3,notizen:"Lokaler Getränkemarkt"},
+  {n:"Intercomestibles",cat:"Getränkehandel",ort:"Zürich",lat:47.3737607,lng:8.5269132,web:"https://intercomestibles.ch",kontakt:"",tel:"+41 44 274 13 04",email:"",status:"Offen",prio:"Mittel",km:85,notizen:"300+ Craft Biere, Laden + B2B"},
+  {n:"HAKO Getränke",cat:"Getränkehandel",ort:"Winterthur",lat:47.4980565,lng:8.7277042,web:"https://www.hakogetraenke.ch",kontakt:"",tel:"+41 52 551 01 53",email:"hallo@hakogetraenke.ch",status:"Offen",prio:"Hoch",km:65,notizen:"Genossenschaft, 300+ Biere"},
+  {n:"Getränke Hahn – Weinfelden",cat:"Getränkehandel",ort:"Weinfelden",lat:47.5677556,lng:9.0943117,web:"https://www.getraenkehahn.ch",kontakt:"",tel:"+41 52 728 99 17",email:"weinfelden@getraenke-hahn.ch",status:"Offen",prio:"Hoch",km:35,notizen:"Fachmarkt + Events TG"},
+  {n:"Getränke Hahn – Frauenfeld",cat:"Getränkehandel",ort:"Frauenfeld",lat:47.565351,lng:8.906278,web:"https://www.getraenkehahn.ch",kontakt:"",tel:"+41 52 728 99 11",email:"info@getraenke-hahn.ch",status:"Offen",prio:"Mittel",km:48,notizen:"Erweiterung Richtung TG West"},
+  {n:"Migros Ostschweiz",cat:"Detailhandel",ort:"Gossau",lat:47.413,lng:9.242,web:"https://www.migros.ch",kontakt:"Stefan Soller",tel:"",email:"",status:"In Verhandlung",prio:"Sehr hoch",km:2,notizen:"Alkoholfrei! 15→130 Filialen, Frühling 2027"},
+  {n:"SPAR Handels AG",cat:"Detailhandel",ort:"St. Gallen",lat:47.424,lng:9.377,web:"https://www.spar.ch",kontakt:"",tel:"",email:"",status:"Offen",prio:"Hoch",km:14,notizen:"Starke Ostschweiz-Präsenz"},
+  {n:"TopCC",cat:"Detailhandel",ort:"St. Gallen",lat:47.414665,lng:9.314065,web:"https://www.topcc.ch",kontakt:"",tel:"+41 71 314 11 11",email:"",status:"Offen",prio:"Mittel",km:14,notizen:"Cash & Carry für Gastronomie"},
+  {n:"LANDI Gossau",cat:"Detailhandel",ort:"Gossau",lat:47.426733,lng:9.241794,web:"https://www.landi.ch",kontakt:"",tel:"+41 58 400 64 50",email:"",status:"Offen",prio:"Mittel",km:3,notizen:"Regionale Produkte, saisonale Aktionen"},
+  {n:"Schlössli St.Gallen",cat:"Restaurant",ort:"St. Gallen",lat:47.4242771,lng:9.3790107,web:"https://schloessli-sg.ch",kontakt:"",tel:"+41 71 222 12 56",email:"",status:"Offen",prio:"Hoch",km:14,notizen:"Regionale Qualitätsgastronomie"},
+  {n:"Restaurant Wienerberg",cat:"Restaurant",ort:"St. Gallen",lat:47.431065,lng:9.373607,web:"https://www.wienerberg.info",kontakt:"",tel:"+41 71 223 16 35",email:"",status:"Offen",prio:"Mittel",km:14,notizen:"Restaurant & Anlässe"},
+  {n:"netts Schützengarten",cat:"Restaurant",ort:"St. Gallen",lat:47.429747,lng:9.37892,web:"https://www.netts.ch",kontakt:"",tel:"+41 71 242 66 77",email:"",status:"Offen",prio:"Niedrig",km:14,notizen:"Schützengarten-gebunden"},
+  {n:"tibits",cat:"Restaurantkette",ort:"St. Gallen",lat:47.4228886,lng:9.3711649,web:"https://www.tibits.ch",kontakt:"",tel:"+41 71 272 61 11",email:"",status:"Offen",prio:"Mittel",km:14,notizen:"Ideal für alkoholfrei"},
+  {n:"Zur Werkstatt",cat:"Eventlocation",ort:"St. Gallen",lat:47.425560,lng:9.375015,web:"https://www.zurwerkstatt-sg.ch",kontakt:"",tel:"+41 71 226 09 90",email:"kontakt@zurwerkstatt-sg.ch",status:"Offen",prio:"Hoch",km:14,notizen:"Koch-, Bar-, Firmenevents"},
+  {n:"Cabaret Foodstories",cat:"Pop-up / Event",ort:"St. Gallen",lat:47.4184486,lng:9.3644027,web:"https://foodstories-sg.ch",kontakt:"",tel:"+41 71 793 92 23",email:"event@pfefferbeere.ch",status:"Offen",prio:"Hoch",km:14,notizen:"Pop-up Nov–Jan, bis 120 Pers."},
+  {n:"Dine & Shine",cat:"Pop-up / Event",ort:"St. Gallen",lat:47.423,lng:9.375,web:"https://www.dine-shine.ch",kontakt:"",tel:"",email:"",status:"Offen",prio:"Mittel",km:15,notizen:"Temporäre Gastronomiekonzepte"},
+  {n:"Best Catering Sommer POPUP",cat:"Pop-up / Event",ort:"Winterthur",lat:47.5011333,lng:8.7598135,web:"https://www.best-catering.ch",kontakt:"",tel:"+41 52 238 38 01",email:"",status:"Offen",prio:"Hoch",km:58,notizen:"Sommer-Pop-up, Catering"},
+  {n:"Dachterrasse Wiedehopf",cat:"Pop-up / Event",ort:"Winterthur",lat:47.5078355,lng:8.7299219,web:"https://www.zum-wiedehopf.ch",kontakt:"",tel:"+41 52 212 22 11",email:"info@zum-wiedehopf.ch",status:"Offen",prio:"Hoch",km:60,notizen:"Dachterrasse, Events"},
+  {n:"OLMA Messen",cat:"Eventveranstalter",ort:"St. Gallen",lat:47.4337911,lng:9.3855895,web:"https://www.olma-messen.ch",kontakt:"",tel:"+41 71 242 01 01",email:"",status:"Offen",prio:"Hoch",km:15,notizen:"Hohe Sichtbarkeit, regional"},
+  {n:"OpenAir St.Gallen",cat:"Eventveranstalter",ort:"St. Gallen",lat:47.413033,lng:9.326491,web:"https://www.openairsg.ch",kontakt:"",tel:"+41 58 225 85 00",email:"",status:"Offen",prio:"Hoch",km:12,notizen:"Musikfestival, hohes Volumen"},
+  {n:"Säntispark Hotel",cat:"Hotel",ort:"Abtwil",lat:47.4175,lng:9.3141667,web:"https://www.saentispark.ch",kontakt:"",tel:"+41 71 313 11 11",email:"",status:"Offen",prio:"Mittel",km:8,notizen:"Hotel, Freizeit, Events"},
+  {n:"Hotel Säntis Appenzell",cat:"Hotel",ort:"Appenzell",lat:47.331812,lng:9.407857,web:"https://www.saentis-appenzell.ch",kontakt:"",tel:"+41 71 788 11 11",email:"",status:"Offen",prio:"Mittel",km:25,notizen:"Tourismus, Konkurrenz Locher"},
+  // BRAUEREIEN
+  {n:"Brauerei Schützengarten",cat:"Brauerei",ort:"St. Gallen",lat:47.4302408,lng:9.3792773,web:"https://www.schuetzengarten.ch",kontakt:"Reto Preisig (CEO)",tel:"+41 71 243 43 43",email:"",status:"Offen",prio:"Niedrig",km:12,notizen:"175'000 hl, braut Migros Non"},
+  {n:"Brauerei Locher",cat:"Brauerei",ort:"Appenzell",lat:47.3309868,lng:9.4124588,web:"https://www.appenzellerbier.ch",kontakt:"",tel:"+41 71 788 01 76",email:"info@appenzellerbier.ch",status:"Offen",prio:"Hoch",km:25,notizen:"Lohnbrauen, Dosenanlage"},
+  {n:"Stadtbühler",cat:"Brauerei",ort:"Gossau",lat:47.412728,lng:9.249445,web:"https://www.stadtbuehler.ch",kontakt:"",tel:"+41 71 385 35 15",email:"",status:"Bestandskunde",prio:"Sehr hoch",km:1,notizen:"Produziert nicht mehr selbst, Lohnbrauen bei Freihof"},
+  {n:"Chopfab Boxer",cat:"Brauerei",ort:"Winterthur",lat:47.4972758,lng:8.7596125,web:"https://www.chopfab.ch",kontakt:"",tel:"+41 52 233 08 70",email:"",status:"Offen",prio:"Mittel",km:65,notizen:"100'000+ hl, Dosenanlage"},
+  {n:"Pilgrim Klosterbrauerei",cat:"Brauerei",ort:"Fischingen TG",lat:47.4114541,lng:8.967352,web:"https://www.pilgrim.ch",kontakt:"Martin Wartmann",tel:"+41 71 571 20 35",email:"",status:"Offen",prio:"Niedrig",km:30,notizen:"~1'000 hl, Eventkooperation"},
+  {n:"Sonnenbräu",cat:"Brauerei",ort:"Rebstein SG",lat:47.3993776,lng:9.584863,web:"https://www.sonnenbraeu.ch",kontakt:"",tel:"+41 71 775 81 11",email:"",status:"Offen",prio:"Mittel",km:30,notizen:"~30'000 hl, möglicher Abfüllpartner"},
+  {n:"Falken Brauerei",cat:"Brauerei",ort:"Schaffhausen",lat:47.7108834,lng:8.6448725,web:"https://www.falken.ch",kontakt:"",tel:"+41 52 632 00 00",email:"",status:"Offen",prio:"Hoch",km:82,notizen:"Dosen-Lohnabfüllung ab 1'000 Stk!"},
+];
+
+const map = L.map('map',{zoomControl:false}).setView([47.44,9.15],10);
+L.control.zoom({position:'topright'}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',maxZoom:19
+}).addTo(map);
+
+function statusClass(s){
+  if(!s)return"status-offen";
+  const l=s.toLowerCase();
+  if(l.includes("verhandlung")||l.includes("prüfung"))return"status-verhandlung";
+  if(l.includes("bestandskunde")||l.includes("aktiv"))return"status-bestandskunde";
+  if(l.includes("gelistet"))return"status-gelistet";
+  return"status-offen";
+}
+
+function makeIcon(catKey){
+  const c=categories[catKey]||categories["Sonstiges"];
+  const size=catKey==="Freihof"?20:12;
+  const border=catKey==="Freihof"?"3px solid #1B4332":"2px solid rgba(0,0,0,.3)";
+  const shadow=catKey==="Freihof"?`box-shadow:0 0 16px ${c.color}80`:`box-shadow:0 0 6px ${c.color}60`;
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:${size}px;height:${size}px;border-radius:50%;background:${c.color};border:${border};${shadow}"></div>`,
+    iconSize:[size,size],iconAnchor:[size/2,size/2]
+  });
+}
+
+const layers={};
+const markers=[];
+
+pois.forEach(p=>{
+  const catKey=classifyCat(p.cat,p.n);
+  const c=categories[catKey]||categories["Sonstiges"];
+  let popup=`<div class="popup-name">${c.icon} ${p.n}</div>`;
+  popup+=`<div class="popup-cat">${p.cat}</div>`;
+  popup+=`<div class="popup-row"><span class="popup-label">Ort:</span>${p.ort}${p.km?' · '+p.km+' km ab Gossau':''}</div>`;
+  if(p.kontakt)popup+=`<div class="popup-row"><span class="popup-label">Kontakt:</span>${p.kontakt}</div>`;
+  if(p.tel)popup+=`<div class="popup-row"><span class="popup-label">Telefon:</span><a class="popup-link" href="tel:${p.tel}">${p.tel}</a></div>`;
+  if(p.email)popup+=`<div class="popup-row"><span class="popup-label">E-Mail:</span><a class="popup-link" href="mailto:${p.email}">${p.email}</a></div>`;
+  if(p.web)popup+=`<div class="popup-row"><span class="popup-label">Web:</span><a class="popup-link" href="${p.web}" target="_blank">${p.web.replace('https://','').replace('http://','').split('/')[0]}</a></div>`;
+  if(p.status)popup+=`<div class="popup-row"><span class="popup-label">Status:</span><span class="popup-status ${statusClass(p.status)}">${p.status}</span></div>`;
+  if(p.prio)popup+=`<div class="popup-row"><span class="popup-label">Priorität:</span>${p.prio}</div>`;
+  if(p.notizen)popup+=`<div class="popup-row" style="margin-top:6px;color:#666;font-size:11px;font-style:italic">${p.notizen}</div>`;
+
+  const m=L.marker([p.lat,p.lng],{icon:makeIcon(catKey)}).bindPopup(popup,{maxWidth:320});
+  m._catKey=catKey;
+  markers.push(m);
+  if(!layers[catKey])layers[catKey]=[];
+  layers[catKey].push(m);
+  m.addTo(map);
+});
+
+// Legend
+const legendEl=document.getElementById('legend');
+legendEl.innerHTML='<h3>Kategorien (klicken zum Filtern)</h3>';
+const usedCats=[...new Set(pois.map(p=>classifyCat(p.cat,p.n)))];
+const catOrder=["Freihof","Craft Beer Bar","Brauerei-Bar","Restaurant","Restaurantkette","Pop-up / Event","Eventlocation","Eventveranstalter","Hotel","Getränkehandel","Detailhandel","Brauerei","Online / Plattform","Sonstiges"];
+const activeCats=new Set(usedCats);
+catOrder.forEach(ck=>{
+  if(!usedCats.includes(ck))return;
+  const c=categories[ck];
+  const count=(layers[ck]||[]).length;
+  const div=document.createElement('div');
+  div.className='legend-item';
+  div.innerHTML=`<span class="dot" style="background:${c.color}"></span>${c.icon} ${ck} (${count})`;
+  div.onclick=()=>{
+    if(activeCats.has(ck)){activeCats.delete(ck);div.classList.add('dimmed')}
+    else{activeCats.add(ck);div.classList.remove('dimmed')}
+    markers.forEach(m=>{
+      if(activeCats.has(m._catKey))m.addTo(map);
+      else map.removeLayer(m);
+    });
+    updateCount();
+  };
+  legendEl.appendChild(div);
+});
+
+function updateCount(){
+  const vis=markers.filter(m=>activeCats.has(m._catKey)).length;
+  document.getElementById('count-display').textContent=vis+' Standorte angezeigt';
+}
+updateCount();
+
+// Freihof radius circles
+L.circle(FREIHOF,{radius:15000,color:'#40C057',fillColor:'#40C057',fillOpacity:.05,weight:1,dashArray:'4 6'}).addTo(map).bindPopup('15 km Radius');
+L.circle(FREIHOF,{radius:30000,color:'#2D6A4F',fillColor:'#2D6A4F',fillOpacity:.03,weight:1,dashArray:'4 6'}).addTo(map).bindPopup('30 km Radius');
+</script>
+</body>
+</html>
