@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Freihof Biere – Vertrieb & Zielgruppen</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root {
+  --bg: #f5f4f0; --fg: #1a1a1a; --muted: #6b6860;
+  --surface: #ffffff; --border: #e0ddd6;
+  --brewery: #8b2500; --retail: #c27a2a; --gastro: #2a6b8b;
+  --event: #3a7d44; --messe: #6b3fa0;
+  --radius-line: rgba(139,37,0,.25);
+  --migros: #f26522;
+  --font: 'DM Sans', system-ui, sans-serif;
+  --kpi-bg: #f9f8f5;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font); }
+
+/* Header */
+.header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1001;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 8px 16px;
+}
+.header-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.header h1 { font-size: 16px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+.header .sub { font-size: 11px; color: var(--muted); margin: 0; }
+.toggle-btn {
+  font-family: var(--font); font-size: 11px; font-weight: 500;
+  color: var(--muted); background: var(--kpi-bg);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 3px 10px; cursor: pointer; white-space: nowrap;
+}
+.toggle-btn:hover { background: var(--border); }
+.kpi-strip {
+  display: flex; gap: 6px; overflow-x: auto; padding: 6px 0 2px;
+  scrollbar-width: none;
+}
+.kpi-strip::-webkit-scrollbar { display: none; }
+.kpi-card {
+  flex: 0 0 auto; background: var(--kpi-bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 10px;
+}
+.kpi-val { font-size: 16px; font-weight: 700; line-height: 1.2; }
+.kpi-label { font-size: 10px; color: var(--muted); line-height: 1.3; }
+.demo-row {
+  display: flex; gap: 8px; padding: 4px 0 0; flex-wrap: wrap;
+  font-size: 11px; color: var(--muted);
+}
+.demo-row span { white-space: nowrap; }
+.demo-tag {
+  display: inline-block; background: var(--kpi-bg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 1px 6px; font-size: 10px;
+}
+.header.collapsed .kpi-strip,
+.header.collapsed .demo-row { display: none; }
+
+#map { position: fixed; inset: 0; z-index: 0; }
+
+/* Legend */
+.panel {
+  position: fixed; bottom: 12px; left: 16px; z-index: 1000;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; max-width: 240px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.12);
+}
+.panel h2 { font-size: 13px; font-weight: 700; margin: 0 0 6px; }
+.cat-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 0; cursor: pointer; font-size: 12px;
+  user-select: none; transition: opacity .15s;
+}
+.cat-row.off { opacity: .35; text-decoration: line-through; }
+.cat-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border);
+}
+.cat-count { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 11px; }
+.radius-note { font-size: 10px; color: var(--muted); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.migros-note { font-size: 10px; color: var(--migros); margin-top: 4px; cursor: pointer; user-select: none; }
+
+.leaflet-popup-content-wrapper { border-radius: 8px !important; font-family: var(--font) !important; box-shadow: 0 4px 16px rgba(0,0,0,.15) !important; }
+.leaflet-popup-content { margin: 10px 14px !important; font-size: 13px; line-height: 1.5; }
+.popup-name { font-weight: 700; font-size: 14px; }
+.popup-ort { color: #888; font-size: 12px; }
+.popup-badge { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 10px; font-size: 11px; color: #fff; font-weight: 500; }
+
+@media (max-width: 500px) {
+  .kpi-val { font-size: 14px; }
+  .panel { max-width: 200px; padding: 10px 12px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header" id="header">
+  <div class="header-top">
+    <div>
+      <h1>🍺 Freihof Biere – Vertrieb &amp; Zielgruppen</h1>
+      <p class="sub">Vertriebsnetz · Zielgruppenanalyse variabel Medienvielfalt · Nov 2026</p>
+    </div>
+    <button class="toggle-btn" id="toggleBtn" onclick="toggleHeader()">▼ Einklappen</button>
+  </div>
+  <div class="kpi-strip">
+    <div class="kpi-card"><div class="kpi-val">76'503</div><div class="kpi-label">Web-Besucher (12 Mt.)</div></div>
+    <div class="kpi-card"><div class="kpi-val">42'292</div><div class="kpi-label">Google-Profil (6 Mt.)</div></div>
+    <div class="kpi-card"><div class="kpi-val">4'582</div><div class="kpi-label">Social Follower</div></div>
+    <div class="kpi-card"><div class="kpi-val">1'173</div><div class="kpi-label">Bewertungen</div></div>
+    <div class="kpi-card"><div class="kpi-val">4.3 ★</div><div class="kpi-label">Durchschnitt</div></div>
+    <div class="kpi-card"><div class="kpi-val">69%</div><div class="kpi-label">Mobil (Web)</div></div>
+  </div>
+  <div class="demo-row">
+    <span>Kern: <b>35–54 J.</b></span>
+    <span>Geschlecht: <b>ausgeglichen</b></span>
+    <span class="demo-tag">FB 2'650</span>
+    <span class="demo-tag">IG 1'932</span>
+    <span>Top: St.Gallen · Gossau · Herisau · Flawil · Andwil</span>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div class="panel">
+  <h2>Vertriebsnetz</h2>
+  <div id="legend"></div>
+  <div class="radius-note">Gestrichelt: 5 km / 15 km ab Gossau</div>
+  <div class="migros-note" id="migrosToggle">■ Migros Ostschweiz Gebiet</div>
+</div>
+
+<script>
+function toggleHeader() {
+  const h = document.getElementById('header');
+  const b = document.getElementById('toggleBtn');
+  h.classList.toggle('collapsed');
+  b.textContent = h.classList.contains('collapsed') ? '▶ Zielgruppen' : '▼ Einklappen';
+  adjustMapTop();
+}
+function adjustMapTop() {
+  const h = document.getElementById('header');
+  document.getElementById('map').style.top = h.offsetHeight + 'px';
+}
+window.addEventListener('resize', adjustMapTop);
+
+const CATS = {
+  'Brauerei':       { color: '#8b2500' },
+  'Detailhandel':   { color: '#c27a2a' },
+  'Gastronomie':    { color: '#2a6b8b' },
+  'Event / Verein': { color: '#3a7d44' },
+  'Messe':          { color: '#6b3fa0' }
+};
+
+const POIS = [
+  {n:'FREIHOF AG',c:'Brauerei',o:'9200 Gossau',lat:47.4163,lng:9.2524},
+  {n:'Brauerei Stadtbühl, Getränkehandel',c:'Detailhandel',o:'9200 Gossau',lat:47.4155,lng:9.2510},
+  {n:'Enoteca Vino è Arte Sarnelli',c:'Detailhandel',o:'9200 Gossau',lat:47.4158,lng:9.2535},
+  {n:'FC Gossau Raiffeisen-Sportwelt',c:'Event / Verein',o:'9200 Gossau',lat:47.4120,lng:9.2460},
+  {n:'Landi-Laveba',c:'Detailhandel',o:'9200 Gossau',lat:47.4140,lng:9.2555},
+  {n:'Metzgerei Grüebler',c:'Detailhandel',o:'9200 Gossau',lat:47.4162,lng:9.2548},
+  {n:'Muelt Gossau, Hans Germann',c:'Detailhandel',o:'9200 Gossau',lat:47.4148,lng:9.2500},
+  {n:'Ochse Metzg',c:'Detailhandel',o:'9200 Gossau',lat:47.4167,lng:9.2518},
+  {n:'Pferdesporttage Gossau',c:'Event / Verein',o:'9200 Gossau',lat:47.4100,lng:9.2480},
+  {n:'Metzgerei Forster',c:'Detailhandel',o:'9212 Arnegg',lat:47.4320,lng:9.2780},
+  {n:'Restaurant Sternen',c:'Gastronomie',o:'9212 Arnegg',lat:47.4325,lng:9.2790},
+  {n:'VBC Andwil-Arnegg',c:'Event / Verein',o:'9212 Arnegg',lat:47.4315,lng:9.2770},
+  {n:'Restaurant Schönau',c:'Gastronomie',o:'9204 Andwil',lat:47.4360,lng:9.2850},
+  {n:'Landi-Laveba',c:'Detailhandel',o:'9230 Flawil',lat:47.4130,lng:9.1920},
+  {n:'Mocafe Genussbäckerei Lichtensteiger',c:'Gastronomie',o:'9230 Flawil',lat:47.4138,lng:9.1935},
+  {n:'Inauen Party- & Festservice AG',c:'Event / Verein',o:'9220 Bischofszell',lat:47.4960,lng:9.2380},
+  {n:'Huusbraui Brauerei und Bar',c:'Gastronomie',o:'9325 Roggwil',lat:47.4830,lng:9.3960},
+  {n:'Post-ab! Restaurant',c:'Gastronomie',o:'7326 Weisstannen',lat:47.0320,lng:9.3850},
+  {n:'OFFA (Frühjahrsmesse)',c:'Messe',o:'9000 St.Gallen',lat:47.4290,lng:9.3870},
+  {n:'OLMA (Herbstmesse)',c:'Messe',o:'9000 St.Gallen',lat:47.4295,lng:9.3865},
+  {n:'Tier und Technik',c:'Messe',o:'9000 St.Gallen',lat:47.4285,lng:9.3875},
+  {n:'Agrama',c:'Messe',o:'Bern',lat:46.9570,lng:7.4530},
+  {n:'Pferdesporttage Erlen',c:'Event / Verein',o:'Erlen',lat:47.5300,lng:9.2300},
+  {n:'Theater Lenggenwil',c:'Event / Verein',o:'Lenggenwil',lat:47.4440,lng:9.1600}
+];
+
+const map = L.map('map', { zoomControl: false }).setView([47.42, 9.25], 11);
+L.control.zoom({ position: 'topright' }).addTo(map);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
+  maxZoom: 19
+}).addTo(map);
+
+// Radius circles
+L.circle([47.4163, 9.2524], { radius: 5000, color: 'rgba(139,37,0,.25)', fillColor: 'rgba(139,37,0,.25)', fillOpacity: .04, weight: 1.5, dashArray: '6 4' }).addTo(map);
+L.circle([47.4163, 9.2524], { radius: 15000, color: 'rgba(139,37,0,.25)', fillColor: 'rgba(139,37,0,.25)', fillOpacity: .02, weight: 1.5, dashArray: '6 4' }).addTo(map);
+
+function mkIcon(color) {
+  return L.divIcon({
+    className: '',
+    html: '<svg width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.27 21.73 0 14 0z" fill="'+color+'"/><circle cx="14" cy="13" r="5.5" fill="#fff" opacity=".9"/></svg>',
+    iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -34]
+  });
+}
+
+const layers = {};
+Object.keys(CATS).forEach(function(c) { layers[c] = L.layerGroup().addTo(map); });
+
+POIS.forEach(function(p) {
+  var m = L.marker([p.lat, p.lng], { icon: mkIcon(CATS[p.c].color) })
+    .bindPopup('<div><span class="popup-name">'+p.n+'</span><br><span class="popup-ort">'+p.o+'</span><br><span class="popup-badge" style="background:'+CATS[p.c].color+'">'+p.c+'</span></div>');
+  layers[p.c].addLayer(m);
+});
+
+// Legend
+var leg = document.getElementById('legend');
+Object.keys(CATS).forEach(function(c) {
+  var count = POIS.filter(function(p){return p.c===c;}).length;
+  var row = document.createElement('div');
+  row.className = 'cat-row';
+  row.innerHTML = '<span class="cat-dot" style="background:'+CATS[c].color+'"></span><span>'+c+'</span><span class="cat-count">'+count+'</span>';
+  row.addEventListener('click', function() {
+    if (map.hasLayer(layers[c])) { map.removeLayer(layers[c]); row.classList.add('off'); }
+    else { map.addLayer(layers[c]); row.classList.remove('off'); }
+  });
+  leg.appendChild(row);
+});
+
+// Migros Genossenschaft Ostschweiz territory
+var migrosCoords = [
+  [47.62,8.78],[47.65,8.85],[47.68,8.92],
+  [47.69,9.00],[47.67,9.10],[47.66,9.20],
+  [47.65,9.30],[47.63,9.40],[47.62,9.50],
+  [47.60,9.60],[47.58,9.65],[47.55,9.70],
+  [47.52,9.72],[47.48,9.72],[47.42,9.70],
+  [47.38,9.65],[47.35,9.62],[47.30,9.58],
+  [47.22,9.55],[47.15,9.53],[47.10,9.52],
+  [47.05,9.50],[47.00,9.48],[46.95,9.50],
+  [46.88,9.52],[46.85,9.50],[46.82,9.45],
+  [46.85,9.38],[46.88,9.30],
+  [46.92,9.20],[46.98,9.10],[47.02,9.00],
+  [47.08,8.92],[47.15,8.88],
+  [47.22,8.82],[47.30,8.78],[47.38,8.76],
+  [47.45,8.75],[47.52,8.76],[47.58,8.77],
+  [47.62,8.78]
+];
+
+var migrosLayer = L.polygon(migrosCoords, {
+  color: '#f26522', weight: 2.5, dashArray: '8 4',
+  fillColor: '#f26522', fillOpacity: 0.06, interactive: false
+}).addTo(map);
+
+var migrosVisible = true;
+document.getElementById('migrosToggle').addEventListener('click', function() {
+  var el = document.getElementById('migrosToggle');
+  if (migrosVisible) {
+    map.removeLayer(migrosLayer);
+    el.style.opacity = '0.4'; el.style.textDecoration = 'line-through';
+  } else {
+    migrosLayer.addTo(map);
+    el.style.opacity = '1'; el.style.textDecoration = 'none';
+  }
+  migrosVisible = !migrosVisible;
+});
+
+setTimeout(adjustMapTop, 50);
+setTimeout(function(){ map.invalidateSize(); }, 100);
+</script>
+</body>
+</html>
